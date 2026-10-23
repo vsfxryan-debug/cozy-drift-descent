@@ -15,6 +15,7 @@ export class Vehicle {
       driftFrictionSlip: 0.85,
       suspensionStiffness: 32,
       suspensionRestLength: 0.65,
+      suspensionMaxTravel: 0.5,
       wheelRadius: 0.42,
     };
     this.stats = { ...this.base };
@@ -25,32 +26,34 @@ export class Vehicle {
     this._build();
   }
 
+  // ←── THIS was missing. game.js calls it every frame.
+  setInput(input) {
+    this.input = input;
+  }
+
   _build() {
     const { RAPIER, world } = this;
 
-    // Chassis rigid body
     const chassisDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(0, 6, 0)
       .setLinearDamping(0.15)
       .setAngularDamping(0.4);
     this.chassis = world.createRigidBody(chassisDesc);
 
-    // Chassis collider
     const colliderDesc = RAPIER.ColliderDesc.cuboid(0.9, 0.35, 1.9)
       .setDensity(120)
       .setFriction(0.2);
     this.chassisCollider = world.createCollider(colliderDesc, this.chassis);
 
-    // Ray-cast vehicle controller
     this.controller = world.createVehicleController(this.chassis);
 
     const hw = 0.85;
     const hh = 0.35;
     const wheelPositions = [
-      { x: -hw, y: -hh, z: -1.3 }, // 0 front left
-      { x:  hw, y: -hh, z: -1.3 }, // 1 front right
-      { x: -hw, y: -hh, z:  1.3 }, // 2 rear left
-      { x:  hw, y: -hh, z:  1.3 }, // 3 rear right
+      { x: -hw, y: -hh, z: -1.3 },
+      { x:  hw, y: -hh, z: -1.3 },
+      { x: -hw, y: -hh, z:  1.3 },
+      { x:  hw, y: -hh, z:  1.3 },
     ];
 
     const down = { x: 0, y: -1, z: 0 };
@@ -74,6 +77,7 @@ export class Vehicle {
       c.setWheelSuspensionStiffness(i, this.stats.suspensionStiffness);
       c.setWheelSuspensionCompression(i, 8.0);
       c.setWheelSuspensionRelaxation(i, 8.0);
+      c.setWheelSuspensionMaxTravel(i, this.stats.suspensionMaxTravel);
       c.setWheelFrictionSlip(i, this.stats.frictionSlip);
       c.setWheelSteering(i, 0);
       c.setWheelEngineForce(i, 0);
@@ -125,32 +129,27 @@ export class Vehicle {
     const c = this.controller;
     const inp = this.input;
 
-    // Smooth steering input
     const steerTarget = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
     this._steer = THREE.MathUtils.lerp(this._steer, steerTarget, 0.15);
     const steer = this._steer * this.stats.steerMax;
 
-    // Front-wheel steering
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Rear-wheel drive: negative force because the car's forward is -Z
+    // Rear-wheel drive. Negative Z = forward for the chassis orientation.
     const engine = inp.throttle ? -this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
 
-    // Brakes on all wheels
     const brake = inp.brake ? this.stats.brakeForce : 0;
     for (let i = 0; i < 4; i++) c.setWheelBrake(i, brake);
 
-    // Drift: drop rear friction to let the back slide
     const rearFriction = inp.drift ? this.stats.driftFrictionSlip : this.stats.frictionSlip;
     c.setWheelFrictionSlip(2, rearFriction);
     c.setWheelFrictionSlip(3, rearFriction);
     c.setWheelFrictionSlip(0, this.stats.frictionSlip);
     c.setWheelFrictionSlip(1, this.stats.frictionSlip);
 
-    // Step the vehicle controller BEFORE world.step()
     c.updateVehicle(dt);
   }
 
@@ -160,13 +159,12 @@ export class Vehicle {
     this.mesh.position.set(t.x, t.y, t.z);
     this.mesh.quaternion.set(r.x, r.y, r.z, r.w);
 
-    // Wheel visuals
     for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i];
       const steering = this.controller.wheelSteering(i) || 0;
       const rotation = this.controller.wheelRotation(i) || 0;
-      w.rotation.y = steering;
       w.rotation.x = rotation;
+      w.rotation.y = steering;
     }
   }
 
@@ -201,5 +199,7 @@ export class Vehicle {
     this.chassis.setRotation(quat, true);
     this.chassis.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.chassis.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    // Immediately place the mesh so the camera doesn't see a stale frame.
+    this.syncMesh();
   }
 }

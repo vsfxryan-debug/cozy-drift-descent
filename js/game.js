@@ -75,7 +75,6 @@ export function startGame(world, RAPIER) {
 
   const input = { throttle: false, brake: false, left: false, right: false, drift: false };
 
-  // Touch detection
   const isTouch = matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 
   if (isTouch) {
@@ -105,7 +104,7 @@ export function startGame(world, RAPIER) {
     if (restartBtn) {
       restartBtn.addEventListener('touchstart', e => {
         e.preventDefault();
-        if (state.screen === 'playing') startLevel(state.currentLevel);
+        if (state.screen === 'playing' && state.currentLevel) startLevel(state.currentLevel);
       }, { passive: false });
     }
 
@@ -113,12 +112,13 @@ export function startGame(world, RAPIER) {
     if (flipBtn) {
       flipBtn.addEventListener('touchstart', e => {
         e.preventDefault();
+        flipBtn.classList.add('pressed');
+        setTimeout(() => flipBtn.classList.remove('pressed'), 120);
         document.body.classList.toggle('brake-right');
       }, { passive: false });
     }
   }
 
-  // Keyboard
   const keyMap = {
     KeyW: 'throttle', ArrowUp: 'throttle',
     KeyS: 'brake', ArrowDown: 'brake',
@@ -128,13 +128,12 @@ export function startGame(world, RAPIER) {
   };
   window.addEventListener('keydown', e => {
     if (keyMap[e.code]) { input[keyMap[e.code]] = true; e.preventDefault(); }
-    if (e.code === 'KeyR' && state.screen === 'playing') startLevel(state.currentLevel);
+    if (e.code === 'KeyR' && state.screen === 'playing' && state.currentLevel) startLevel(state.currentLevel);
   });
   window.addEventListener('keyup', e => {
     if (keyMap[e.code]) { input[keyMap[e.code]] = false; e.preventDefault(); }
   });
 
-  // UI
   const $ = id => document.getElementById(id);
   const showScreen = name => {
     state.screen = name;
@@ -171,7 +170,6 @@ export function startGame(world, RAPIER) {
   }
 
   function startLevel(lvl) {
-    // Clear scene except lights and vehicle mesh
     while (scene.children.length > 0) scene.remove(scene.children[0]);
     scene.add(hemi, sun, sun.target);
     scene.add(vehicle.mesh);
@@ -190,12 +188,15 @@ export function startGame(world, RAPIER) {
     const track = buildTrack(world, RAPIER, scene, lvl);
     state.track = track;
 
-    // Spawn
     const p0 = track.curve.getPointAt(0);
     const t0 = track.curve.getTangentAt(0);
     const h0 = Math.atan2(-t0.x, -t0.z);
     const quat = new THREE.Quaternion().setFromAxisAngle(UP, h0);
-    vehicle.reset({ x: p0.x, y: p0.y + 2, z: p0.z }, { x: quat.x, y: quat.y, z: quat.z, w: quat.w });
+    // Spawn 2 units above the road so the wheels have room to reach the ground.
+    vehicle.reset(
+      { x: p0.x, y: p0.y + 2, z: p0.z },
+      { x: quat.x, y: quat.y, z: quat.z, w: quat.w }
+    );
 
     state.lastSafe.copy(p0);
     state.lastSafeQuat.copy(quat);
@@ -209,10 +210,10 @@ export function startGame(world, RAPIER) {
     state.progress = 0;
     state.lastSafeTimer = 0;
 
-    // Camera snap
     const camFwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, h0);
-    camera.position.copy(p0).addScaledVector(camFwd, -12).add(new THREE.Vector3(0, 7, 0));
-    camera.lookAt(p0);
+    const carPos = vehicle.position;
+    camera.position.copy(carPos).addScaledVector(camFwd, -11).add(new THREE.Vector3(0, 6.5, 0));
+    camera.lookAt(carPos.clone().addScaledVector(camFwd, 6).add(new THREE.Vector3(0, 1, 0)));
 
     showScreen('hud');
     state.screen = 'playing';
@@ -232,12 +233,13 @@ export function startGame(world, RAPIER) {
     const track = state.track;
     if (!track) return;
 
-    // 1. Feed input to the vehicle and step its controller
+    // Rapier fixed-step-ish: cap dt to keep physics stable on frame drops.
+    const physDt = Math.min(dt, 1 / 30);
+    world.timestep = physDt;
+
     vehicle.setInput(input);
-    vehicle.update(dt);
-    // 2. Step the world
+    vehicle.update(physDt);
     world.step();
-    // 3. Sync visuals
     vehicle.syncMesh();
 
     state.time += dt;
@@ -264,17 +266,15 @@ export function startGame(world, RAPIER) {
       state.points += lateral * vehicle.speed * state.flow * dt * 0.6;
     }
 
-    // Safe respawn tracking
     state.lastSafeTimer += dt;
-    if (state.lastSafeTimer > 1.0 && pos.y > track.curve.getPointAt(0).y - 10) {
+    const startY = track.curve.getPointAt(0).y;
+    if (state.lastSafeTimer > 1.0 && pos.y > startY - 10) {
       state.lastSafe.copy(pos);
       const r = vehicle.chassis.rotation();
       state.lastSafeQuat.set(r.x, r.y, r.z, r.w);
       state.lastSafeTimer = 0;
     }
 
-    // Fell off
-    const startY = track.curve.getPointAt(0).y;
     if (pos.y < startY - 60) {
       vehicle.reset(
         { x: state.lastSafe.x, y: state.lastSafe.y + 2, z: state.lastSafe.z },
@@ -285,7 +285,6 @@ export function startGame(world, RAPIER) {
 
     if (prog > 0.97 && !state.finished) finishLevel();
 
-    // Camera follow
     const fwd = vehicle.forward;
     const camPos = pos.clone().addScaledVector(fwd, -11).add(new THREE.Vector3(0, 6.5, 0));
     camera.position.lerp(camPos, 0.12);
@@ -348,7 +347,11 @@ export function startGame(world, RAPIER) {
   function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(0.05, clock.getDelta());
-    if (state.screen === 'playing') updatePlaying(dt);
+    try {
+      if (state.screen === 'playing') updatePlaying(dt);
+    } catch (err) {
+      console.error('updatePlaying error:', err);
+    }
     renderer.render(scene, camera);
   }
   animate();
