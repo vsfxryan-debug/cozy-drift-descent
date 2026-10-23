@@ -2,28 +2,30 @@ import * as THREE from 'three';
 
 export class Vehicle {
   constructor(world, RAPIER, scene) {
+    console.log('[CozyDrift] vehicle.js v6 loaded');
+
     this.world = world;
     this.RAPIER = RAPIER;
     this.scene = scene;
 
     this.base = {
-      engineForce: 3200,
+      engineForce: 3500,
       brakeForce: 60,
-      steerMax: 0.55,
-      frictionSlip: 3.0,
-      driftFrictionSlip: 0.85,
-      suspensionStiffness: 45,
-      suspensionCompression: 4.4,
-      suspensionRelaxation: 2.5,
-      suspensionRestLength: 0.35,
-      suspensionMaxTravel: 0.25,
+      steerMax: 0.5,
+      frictionSlip: 3.5,
+      driftFrictionSlip: 0.9,
+      suspensionStiffness: 60,
+      suspensionCompression: 4.0,
+      suspensionRelaxation: 4.0,
+      suspensionRestLength: 0.3,
+      suspensionMaxTravel: 0.2,
       wheelRadius: 0.42,
     };
     this.stats = { ...this.base };
 
     this.input = { throttle: false, brake: false, left: false, right: false, drift: false };
     this._steer = 0;
-    this._hh = 0.35; // chassis half-height; reused in mesh building
+    this._hh = 0.35;
 
     this._build();
   }
@@ -56,8 +58,11 @@ export class Vehicle {
       { x:  hw, y: -this._hh, z:  1.3 }, // 3 rear right
     ];
 
+    // Rapier's wheel forward = down × axle.
+    //   down × (1,0,0)  = (0,0,+1) → positive engine = +Z = backward.
+    //   down × (-1,0,0) = (0,0,-1) → positive engine = -Z = forward. ✓
     const down = { x: 0, y: -1, z: 0 };
-    const axle = { x: 1, y: 0, z: 0 };
+    const axle = { x: -1, y: 0, z: 0 };
 
     for (const pos of this.wheelLocalPositions) {
       this.controller.addWheel(
@@ -88,7 +93,6 @@ export class Vehicle {
   _buildMesh() {
     const g = new THREE.Group();
 
-    // Visual chassis body — sits on top of the physics collider
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(1.7, 0.5, 3.6),
       new THREE.MeshStandardMaterial({ color: 0xd97757, roughness: 0.55, metalness: 0.15 })
@@ -112,8 +116,9 @@ export class Vehicle {
     for (let i = 0; i < this.wheelLocalPositions.length; i++) {
       const p = this.wheelLocalPositions[i];
       const w = new THREE.Mesh(wheelGeo, wheelMat);
-      w.position.set(p.x, p.y, p.z);
-      w.rotation.order = 'YXZ'; // steer around Y, THEN spin around X
+      // Fixed offset — no suspension tracking, so no jitter/wobble.
+      w.position.set(p.x, p.y - this.stats.suspensionRestLength, p.z);
+      w.rotation.order = 'YXZ';
       g.add(w);
       this.wheels.push(w);
     }
@@ -139,8 +144,7 @@ export class Vehicle {
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Positive engine force pushes the wheel along its forward direction.
-    // Rapier forward = axle × down = (1,0,0) × (0,-1,0) = (0,0,-1) = our car's -Z.
+    // Positive engine now drives forward (-Z) thanks to axle = (-1,0,0).
     const engine = inp.throttle ? this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
@@ -165,22 +169,9 @@ export class Vehicle {
 
     for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i];
-      const p = this.wheelLocalPositions[i];
-
-      // Get current suspension length, fall back to rest length if API is absent
-      let suspLen = this.stats.suspensionRestLength;
-      if (typeof this.controller.wheelSuspensionLength === 'function') {
-        const raw = this.controller.wheelSuspensionLength(i);
-        if (raw != null && isFinite(raw)) suspLen = raw;
-      }
-
       const steering = this.controller.wheelSteering(i) || 0;
       const rotation = this.controller.wheelRotation(i) || 0;
-
-      // Wheel sits at chassis bottom, dropped by current suspension length
-      w.position.set(p.x, p.y - suspLen, p.z);
       w.rotation.y = steering;
-      // Keep spin angle bounded so float precision never degrades
       w.rotation.x = rotation % (Math.PI * 2);
     }
   }
