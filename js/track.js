@@ -7,12 +7,11 @@ export function buildTrack(world, RAPIER, scene, level) {
   const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.5);
   const W = level.width;
   const SEGMENTS = 240;
-  const LEAD_IN = 6;   // extra segments added BEFORE t=0
-  const LEAD_OUT = 6;  // extra segments added AFTER t=1
+  const LEAD_IN = 20;   // segments before t=0
+  const LEAD_OUT = 20;  // segments after t=1
   const bankArr = level.banks;
   const bankCount = bankArr.length;
   const curveLength = curve.getLength();
-  const stepLen = curveLength / SEGMENTS;
 
   const bankAt = (t) => {
     if (t <= 0) return bankArr[0];
@@ -25,18 +24,18 @@ export function buildTrack(world, RAPIER, scene, level) {
     return a * (1 - f) + b * f;
   };
 
-  // Get a point + tangent for t in [-LEAD_IN/SEGMENTS, 1 + LEAD_OUT/SEGMENTS].
-  // Extrapolates linearly beyond the endpoints using the endpoint tangents.
+  // t is a normalized curve parameter where 1/SEGMENTS = one segment step.
+  // The offset distance for |t| > 1 or t < 0 is t * curveLength (NOT t * stepLen).
   const getPointAndTangent = (t) => {
     if (t < 0) {
       const p = curve.getPointAt(0);
       const tan = curve.getTangentAt(0).normalize();
-      return { point: p.clone().addScaledVector(tan, t * stepLen), tangent: tan };
+      return { point: p.clone().addScaledVector(tan, t * curveLength), tangent: tan };
     }
     if (t > 1) {
       const p = curve.getPointAt(1);
       const tan = curve.getTangentAt(1).normalize();
-      return { point: p.clone().addScaledVector(tan, (t - 1) * stepLen), tangent: tan };
+      return { point: p.clone().addScaledVector(tan, (t - 1) * curveLength), tangent: tan };
     }
     return { point: curve.getPointAt(t), tangent: curve.getTangentAt(t).normalize() };
   };
@@ -84,8 +83,7 @@ export function buildTrack(world, RAPIER, scene, level) {
   roadMesh.receiveShadow = true;
   scene.add(roadMesh);
 
-  // Rapier trimesh collider — same extended vertices, so the physics surface
-  // matches the visual surface exactly and covers the lead-in/run-out.
+  // Collider uses the exact same extended vertices — physics matches visuals.
   const vertices = new Float32Array(positions);
   const indicesArray = new Uint32Array(indices);
   const colliderDesc = RAPIER.ColliderDesc.trimesh(vertices, indicesArray);
