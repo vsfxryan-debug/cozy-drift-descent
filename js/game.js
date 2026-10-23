@@ -16,7 +16,6 @@ function getLeaderboard(levelId) {
   const key = `cozyDrift_lb_${levelId}`;
   let lb = JSON.parse(localStorage.getItem(key) || 'null');
   if (!lb) {
-    // seed with friendly fake scores scaled by level difficulty
     lb = FAKE_NAMES.slice(0, 5).map((n, i) => ({
       name: n,
       score: Math.floor((6000 - i * 900) * (1 + levelId * 0.4)),
@@ -132,11 +131,9 @@ export function startGame() {
 
   // ---------- LEVEL START ----------
   function startLevel(lvl) {
-    // clear old
     while (scene.children.length > 0) scene.remove(scene.children[0]);
     scene.add(hemi, sun, sun.target);
 
-    // theme
     const th = lvl.theme;
     scene.background = new THREE.Color(th.sky);
     scene.fog = new THREE.FogExp2(th.fog, th.fogDensity);
@@ -145,20 +142,16 @@ export function startGame() {
     hemi.color.setHex(th.sun);
     hemi.groundColor.setHex(th.ambient);
 
-    // rebuild car (it was removed with scene children)
     car.mesh = car._buildMesh();
     car.wheels = car.mesh.children.filter(c => c.geometry?.type === 'CylinderGeometry');
     scene.add(car.mesh);
 
-    // apply upgrades
     const mods = save.upgrades.map(id => UPGRADES.find(u => u.id === id)?.apply).filter(Boolean);
     car.applyStats(mods);
 
-    // build track
     const track = buildTrack(scene, lvl);
     state.track = track;
 
-    // spawn
     const p0 = track.curve.getPointAt(0);
     const t0 = track.curve.getTangentAt(0);
     const h0 = Math.atan2(-t0.x, -t0.z);
@@ -175,15 +168,14 @@ export function startGame() {
     state.progress = 0;
     state.lastSafeTimer = 0;
 
-    // particles
     buildParticles(th);
 
-    // camera
     const camFwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, h0);
     camera.position.copy(car.position).addScaledVector(camFwd, -12).add(new THREE.Vector3(0, 7, 0));
     camera.lookAt(car.position);
 
     showScreen('hud');
+    state.screen = 'playing'; // FIX: without this, the animate loop never calls updatePlaying
     updateHUD(true);
   }
 
@@ -244,28 +236,22 @@ export function startGame() {
     const track = state.track;
     if (!track) return;
 
-    // ground
     const ground = getGround(raycaster, track.road, car.position);
-
-    // grip multiplier from level theme
     const gripMult = state.currentLevel.gripMultiplier || 1;
 
     car.update(dt, input, ground, gripMult);
 
     state.time += dt;
 
-    // progress
     const prog = progressAlong(track.curve, car.position);
     state.progress = prog;
 
-    // flow logic
     const isDrifting = car.drifting && car.lateralSpeed > 3;
     const isOnBank = ground && (1 - Math.abs(ground.normal.y)) > 0.25;
     const isFast = car.speed > 15;
 
     if (isDrifting || isOnBank) {
-      let gain = state.currentLevel.gripMultiplier; // so icy levels still give flow
-      gain = 1;
+      let gain = 1;
       if (isFast) gain *= 2;
       if (car.stats.adrenaline && car.speed > car.stats.maxSpeed * 0.7) gain *= 1.5;
       state.flow += gain * car.stats.flowGain * dt;
@@ -275,13 +261,11 @@ export function startGame() {
     state.flow = Math.max(1, Math.min(20, state.flow));
     state.maxFlow = Math.max(state.maxFlow, state.flow);
 
-    // points
     if (isDrifting || isOnBank) {
       const driftContrib = Math.abs(car.lateralSpeed) * 0.5 + (isOnBank ? 1 : 0);
       state.points += driftContrib * car.speed * state.flow * dt * 0.8;
     }
 
-    // safe respawn
     state.lastSafeTimer += dt;
     if (state.lastSafeTimer > 1.0 && ground && car.position.y > ground.point.y - 1) {
       state.lastSafe.copy(car.position);
@@ -289,20 +273,16 @@ export function startGame() {
       state.lastSafeTimer = 0;
     }
 
-    // fell off
     const startPoint = track.curve.getPointAt(0);
     if (car.position.y < startPoint.y - 60) {
-      // crash — reset to last safe spot, lose flow
       car.resetAt(state.lastSafe, state.lastSafeHeading);
       state.flow = Math.max(1, state.flow * (car.stats.flowRetain || 0));
     }
 
-    // finish
     if (prog > 0.97 && !state.finished) {
       finishLevel();
     }
 
-    // camera follow
     const camFwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(UP, car.heading);
     const camPos = car.position.clone().addScaledVector(camFwd, -11).add(new THREE.Vector3(0, 6.5, 0));
     camera.position.lerp(camPos, 0.12);
@@ -329,20 +309,16 @@ export function startGame() {
     const speedBonus = Math.round(state.maxFlow * 200);
     const total = Math.round(state.points + speedBonus);
 
-    // leaderboard
     const name = save.name || 'You';
     const lb = getLeaderboard(state.currentLevel.id);
     lb.push({ name, score: total, date: Date.now() });
     saveLeaderboard(state.currentLevel.id, lb);
 
-    // mark completed
     if (!save.completed.includes(state.currentLevel.id)) {
       save.completed.push(state.currentLevel.id);
     }
     writeSave(save);
 
-    // show results
-    const nextLevel = LEVELS[state.currentLevel.id + 1];
     const stats = $('results-stats');
     stats.innerHTML = `
       <div class="stat"><div class="label">Score</div><div class="value">${total.toLocaleString()}</div></div>
@@ -350,7 +326,6 @@ export function startGame() {
       <div class="stat"><div class="label">Time</div><div class="value">${state.time.toFixed(1)}s</div></div>
     `;
 
-    // 3 random upgrade cards
     const cards = $('upgrade-cards');
     cards.innerHTML = '';
     const pool = [...UPGRADES].sort(() => Math.random() - 0.5).slice(0, 3);
@@ -366,7 +341,6 @@ export function startGame() {
       cards.appendChild(el);
     }
 
-    // leaderboard display
     const lbDiv = $('leaderboard');
     const top = lb.slice(0, 5);
     lbDiv.innerHTML = `<h4>Mountain Board</h4>` + top.map((row, i) =>
@@ -396,7 +370,6 @@ export function startGame() {
   }
   animate();
 
-  // ---------- RESIZE ----------
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
