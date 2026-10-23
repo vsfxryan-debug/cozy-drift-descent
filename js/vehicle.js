@@ -26,7 +26,6 @@ export class Vehicle {
     this._build();
   }
 
-  // ←── THIS was missing. game.js calls it every frame.
   setInput(input) {
     this.input = input;
   }
@@ -77,7 +76,8 @@ export class Vehicle {
       c.setWheelSuspensionStiffness(i, this.stats.suspensionStiffness);
       c.setWheelSuspensionCompression(i, 8.0);
       c.setWheelSuspensionRelaxation(i, 8.0);
-      c.setWheelSuspensionMaxTravel(i, this.stats.suspensionMaxTravel);
+      // Rapier's actual API name is setWheelMaxSuspensionTravel
+      c.setWheelMaxSuspensionTravel(i, this.stats.suspensionMaxTravel);
       c.setWheelFrictionSlip(i, this.stats.frictionSlip);
       c.setWheelSteering(i, 0);
       c.setWheelEngineForce(i, 0);
@@ -199,7 +199,6 @@ export class Vehicle {
     this.chassis.setRotation(quat, true);
     this.chassis.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.chassis.setAngvel({ x: 0, y: 0, z: 0 }, true);
-    // Immediately place the mesh so the camera doesn't see a stale frame.
     this.syncMesh();
   }
 }
