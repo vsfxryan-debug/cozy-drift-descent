@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export class Vehicle {
   constructor(world, RAPIER, scene) {
-    console.log('[CozyDrift] vehicle.js v10 loaded');
+    console.log('[CozyDrift] vehicle.js v11 loaded');
 
     this.world = world;
     this.RAPIER = RAPIER;
@@ -52,17 +52,15 @@ export class Vehicle {
 
     this.controller = world.createVehicleController(this.chassis);
 
-    // Direct property assignment (the documented usage pattern).
-    // Forward = +Z, Up = +Y.
     this.controller.indexForwardAxis = 2;
     this.controller.indexUpAxis = 1;
 
     const hw = 0.85;
     this.wheelLocalPositions = [
-      { x: -hw, y: -hh, z: -1.3 },
-      { x:  hw, y: -hh, z: -1.3 },
-      { x: -hw, y: -hh, z:  1.3 },
-      { x:  hw, y: -hh, z:  1.3 },
+      { x: -hw, y: -hh, z: -1.3 }, // 0 front left  (steers)
+      { x:  hw, y: -hh, z: -1.3 }, // 1 front right (steers)
+      { x: -hw, y: -hh, z:  1.3 }, // 2 rear left   (drives)
+      { x:  hw, y: -hh, z:  1.3 }, // 3 rear right  (drives)
     ];
 
     const down = { x: 0, y: -1, z: 0 };
@@ -106,12 +104,24 @@ export class Vehicle {
     body.castShadow = true;
     g.add(body);
 
+    // Cabin offset toward +Z so the visual front is clearly at -Z,
+    // matching the mesh's front wheels and the game's forward vector.
     const cabin = new THREE.Mesh(
-      new THREE.BoxGeometry(1.3, 0.5, 1.8),
+      new THREE.BoxGeometry(1.3, 0.5, 1.4),
       new THREE.MeshStandardMaterial({ color: 0xffe4c4, roughness: 0.7 })
     );
-    cabin.position.set(0, hh + 0.25, 0);
+    cabin.position.set(0, hh + 0.25, 0.4);
     g.add(cabin);
+
+    // Headlights at -Z mark the actual front of the car.
+    const lightMat = new THREE.MeshStandardMaterial({
+      color: 0xfff3c4, emissive: 0xffcc88, emissiveIntensity: 0.8,
+    });
+    for (const x of [-0.55, 0.55]) {
+      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.06), lightMat);
+      hl.position.set(x, hh * 0.3, -1.82);
+      g.add(hl);
+    }
 
     const wheelGeo = new THREE.CylinderGeometry(this.stats.wheelRadius, this.stats.wheelRadius, 0.26, 16);
     wheelGeo.rotateZ(Math.PI / 2);
@@ -141,6 +151,10 @@ export class Vehicle {
     const c = this.controller;
     const inp = this.input;
 
+    // If W drives the car toward the camera (uphill), change 1 to -1.
+    // This is the ONLY knob for engine direction.
+    const ENGINE_SIGN = 1;
+
     const steerTarget = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
     this._steer = THREE.MathUtils.lerp(this._steer, steerTarget, 0.2);
     const steer = this._steer * this.stats.steerMax;
@@ -148,9 +162,7 @@ export class Vehicle {
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Positive engine force drives along +Z (the configured forward axis).
-    // The track descends toward -Z, so W must use a negative force to go downhill.
-    const engine = inp.throttle ? -this.stats.engineForce : 0;
+    const engine = inp.throttle ? ENGINE_SIGN * this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
 
