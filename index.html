@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cozy Drift Descent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="menu" class="screen active">
+    <h1>Cozy Drift Descent</h1>
+    <p class="subtitle">Drift. Surf. Flow.</p>
+    <div class="buttons">
+      <button id="btn-play">Play</button>
+      <button id="btn-reset" class="ghost">Reset Save</button>
+    </div>
+    <p class="hint">WASD / Arrows to drive · Space to handbrake</p>
+  </div>
+
+  <div id="levels" class="screen">
+    <h2>Choose a Mountain</h2>
+    <div id="level-list"></div>
+    <button id="btn-back" class="ghost small">Back</button>
+  </div>
+
+  <div id="hud" class="screen">
+    <div class="hud-topleft">
+      <div id="hud-speed">0<span>km/h</span></div>
+    </div>
+    <div class="hud-topright">
+      <div id="hud-flow">×1.0</div>
+      <div id="hud-points">0 pts</div>
+    </div>
+    <div class="hud-bottom">
+      <div id="hud-progress-bar"><div id="hud-progress-fill"></div></div>
+      <p class="hint">R to restart</p>
+    </div>
+  </div>
+
+  <div id="results" class="screen">
+    <h2>Run Complete!</h2>
+    <div id="results-stats" class="stats-grid"></div>
+    <h3>Choose an Upgrade</h3>
+    <div id="upgrade-cards"></div>
+    <div id="leaderboard"></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

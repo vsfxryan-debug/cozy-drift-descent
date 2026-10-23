@@ -1,0 +1,10 @@
+cozy-drift-descent/
+├── index.html
+├── style.css
+├── js/
+│   ├── main.js
+│   ├── game.js
+│   ├── data.js
+│   ├── track.js
+│   └── car.js
+└── README.md
