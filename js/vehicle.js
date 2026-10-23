@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export class Vehicle {
   constructor(world, RAPIER, scene) {
-    console.log('[CozyDrift] vehicle.js v9 loaded');
+    console.log('[CozyDrift] vehicle.js v10 loaded');
 
     this.world = world;
     this.RAPIER = RAPIER;
@@ -52,10 +52,10 @@ export class Vehicle {
 
     this.controller = world.createVehicleController(this.chassis);
 
-    // These are SETTER PROPERTIES in Rapier 0.14, not methods.
-    // Assign them; do not call them with parentheses.
-    this.controller.setIndexForwardAxis = 2; // Z is forward
-    this.controller.indexUpAxis = 1;          // Y is up
+    // Direct property assignment (the documented usage pattern).
+    // Forward = +Z, Up = +Y.
+    this.controller.indexForwardAxis = 2;
+    this.controller.indexUpAxis = 1;
 
     const hw = 0.85;
     this.wheelLocalPositions = [
@@ -148,8 +148,8 @@ export class Vehicle {
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Forward is now Z. Positive engine force pushes toward +Z.
-    // The track descends toward -Z, so W must be negative.
+    // Positive engine force drives along +Z (the configured forward axis).
+    // The track descends toward -Z, so W must use a negative force to go downhill.
     const engine = inp.throttle ? -this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
