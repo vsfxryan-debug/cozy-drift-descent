@@ -12,7 +12,9 @@ export class Vehicle {
       steerMax: 0.55,
       frictionSlip: 3.0,
       driftFrictionSlip: 0.85,
-      suspensionStiffness: 28,
+      suspensionStiffness: 45,
+      suspensionCompression: 4.4,
+      suspensionRelaxation: 2.5,
       suspensionRestLength: 0.35,
       suspensionMaxTravel: 0.25,
       wheelRadius: 0.42,
@@ -21,6 +23,7 @@ export class Vehicle {
 
     this.input = { throttle: false, brake: false, left: false, right: false, drift: false };
     this._steer = 0;
+    this._hh = 0.35; // chassis half-height; reused in mesh building
 
     this._build();
   }
@@ -38,7 +41,7 @@ export class Vehicle {
       .setAngularDamping(0.4);
     this.chassis = world.createRigidBody(chassisDesc);
 
-    const colliderDesc = RAPIER.ColliderDesc.cuboid(0.9, 0.35, 1.9)
+    const colliderDesc = RAPIER.ColliderDesc.cuboid(0.9, this._hh, 1.9)
       .setDensity(120)
       .setFriction(0.2);
     this.chassisCollider = world.createCollider(colliderDesc, this.chassis);
@@ -46,20 +49,17 @@ export class Vehicle {
     this.controller = world.createVehicleController(this.chassis);
 
     const hw = 0.85;
-    const hh = 0.35;
-    const wheelPositions = [
-      { x: -hw, y: -hh, z: -1.3 },
-      { x:  hw, y: -hh, z: -1.3 },
-      { x: -hw, y: -hh, z:  1.3 },
-      { x:  hw, y: -hh, z:  1.3 },
+    this.wheelLocalPositions = [
+      { x: -hw, y: -this._hh, z: -1.3 }, // 0 front left
+      { x:  hw, y: -this._hh, z: -1.3 }, // 1 front right
+      { x: -hw, y: -this._hh, z:  1.3 }, // 2 rear left
+      { x:  hw, y: -this._hh, z:  1.3 }, // 3 rear right
     ];
 
-    // Down direction (suspension travel) and axle (spin axis) are different things.
-    // Forward = -Z, so the wheel's spin axis MUST be X. This was the bug.
     const down = { x: 0, y: -1, z: 0 };
     const axle = { x: 1, y: 0, z: 0 };
 
-    for (const pos of wheelPositions) {
+    for (const pos of this.wheelLocalPositions) {
       this.controller.addWheel(
         pos, down, axle,
         this.stats.suspensionRestLength,
@@ -75,8 +75,8 @@ export class Vehicle {
     const c = this.controller;
     for (let i = 0; i < c.numWheels(); i++) {
       c.setWheelSuspensionStiffness(i, this.stats.suspensionStiffness);
-      c.setWheelSuspensionCompression(i, 6.0);
-      c.setWheelSuspensionRelaxation(i, 6.0);
+      c.setWheelSuspensionCompression(i, this.stats.suspensionCompression);
+      c.setWheelSuspensionRelaxation(i, this.stats.suspensionRelaxation);
       c.setWheelMaxSuspensionTravel(i, this.stats.suspensionMaxTravel);
       c.setWheelFrictionSlip(i, this.stats.frictionSlip);
       c.setWheelSteering(i, 0);
@@ -88,29 +88,32 @@ export class Vehicle {
   _buildMesh() {
     const g = new THREE.Group();
 
+    // Visual chassis body — sits on top of the physics collider
     const body = new THREE.Mesh(
-      new THREE.BoxGeometry(1.8, 0.55, 3.8),
+      new THREE.BoxGeometry(1.7, 0.5, 3.6),
       new THREE.MeshStandardMaterial({ color: 0xd97757, roughness: 0.55, metalness: 0.15 })
     );
-    body.position.y = 0.55;
+    body.position.y = 0.1;
     body.castShadow = true;
     g.add(body);
 
     const cabin = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 0.65, 1.9),
+      new THREE.BoxGeometry(1.3, 0.55, 1.8),
       new THREE.MeshStandardMaterial({ color: 0xffe4c4, roughness: 0.7 })
     );
-    cabin.position.set(0, 1.1, -0.1);
+    cabin.position.set(0, 0.6, 0);
     g.add(cabin);
 
     const wheelGeo = new THREE.CylinderGeometry(this.stats.wheelRadius, this.stats.wheelRadius, 0.28, 16);
-    wheelGeo.rotateZ(Math.PI / 2);  // axis now along X, matches axle = (1,0,0)
+    wheelGeo.rotateZ(Math.PI / 2);
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
+
     this.wheels = [];
-    const wp = [[-0.85, 0.42, -1.3], [0.85, 0.42, -1.3], [-0.85, 0.42, 1.3], [0.85, 0.42, 1.3]];
-    for (const [x, y, z] of wp) {
+    for (let i = 0; i < this.wheelLocalPositions.length; i++) {
+      const p = this.wheelLocalPositions[i];
       const w = new THREE.Mesh(wheelGeo, wheelMat);
-      w.position.set(x, y, z);
+      w.position.set(p.x, p.y, p.z);
+      w.rotation.order = 'YXZ'; // steer around Y, THEN spin around X
       g.add(w);
       this.wheels.push(w);
     }
@@ -130,16 +133,15 @@ export class Vehicle {
     const inp = this.input;
 
     const steerTarget = (inp.left ? 1 : 0) - (inp.right ? 1 : 0);
-    this._steer = THREE.MathUtils.lerp(this._steer, steerTarget, 0.15);
+    this._steer = THREE.MathUtils.lerp(this._steer, steerTarget, 0.2);
     const steer = this._steer * this.stats.steerMax;
 
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Rear-wheel drive. Negative because forward is -Z and positive engine
-    // force pushes the wheel toward +Z (per Rapier's axle cross suspension
-    // convention).
-    const engine = inp.throttle ? -this.stats.engineForce : 0;
+    // Positive engine force pushes the wheel along its forward direction.
+    // Rapier forward = axle × down = (1,0,0) × (0,-1,0) = (0,0,-1) = our car's -Z.
+    const engine = inp.throttle ? this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
 
@@ -163,10 +165,23 @@ export class Vehicle {
 
     for (let i = 0; i < this.wheels.length; i++) {
       const w = this.wheels[i];
+      const p = this.wheelLocalPositions[i];
+
+      // Get current suspension length, fall back to rest length if API is absent
+      let suspLen = this.stats.suspensionRestLength;
+      if (typeof this.controller.wheelSuspensionLength === 'function') {
+        const raw = this.controller.wheelSuspensionLength(i);
+        if (raw != null && isFinite(raw)) suspLen = raw;
+      }
+
       const steering = this.controller.wheelSteering(i) || 0;
       const rotation = this.controller.wheelRotation(i) || 0;
-      w.rotation.x = rotation;
+
+      // Wheel sits at chassis bottom, dropped by current suspension length
+      w.position.set(p.x, p.y - suspLen, p.z);
       w.rotation.y = steering;
+      // Keep spin angle bounded so float precision never degrades
+      w.rotation.x = rotation % (Math.PI * 2);
     }
   }
 
