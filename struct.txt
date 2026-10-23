@@ -3,8 +3,9 @@ cozy-drift-descent/
 ├── style.css
 ├── js/
 │   ├── main.js
-│   ├── game.js
-│   ├── data.js
+│   ├── physics.js
+│   ├── vehicle.js
 │   ├── track.js
-│   └── car.js
+│   ├── game.js
+│   └── data.js
 └── README.md

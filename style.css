@@ -14,9 +14,12 @@ html, body {
   overflow: hidden;
   background: var(--deep);
   color: var(--cream);
+  -webkit-tap-highlight-color: transparent;
 }
 
-#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+body.touch-active { touch-action: none; }
+
+#game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
 
 .screen {
   position: fixed; inset: 0;
@@ -37,12 +40,13 @@ h1 {
   text-shadow: 0 4px 24px rgba(255, 180, 120, 0.35);
   letter-spacing: 0.02em;
   color: var(--warm);
+  text-align: center;
 }
-h2 { font-size: clamp(1.5rem, 4vw, 2.4rem); color: var(--warm); }
+h2 { font-size: clamp(1.5rem, 4vw, 2.4rem); color: var(--warm); text-align: center; }
 h3 { font-size: 1.2rem; color: var(--warm); margin-top: 1rem; }
 
 .subtitle { font-size: 1.1rem; opacity: 0.8; margin-bottom: 1rem; }
-.hint { font-size: 0.85rem; opacity: 0.5; margin-top: 0.5rem; }
+.hint { font-size: 0.85rem; opacity: 0.5; margin-top: 0.5rem; text-align: center; }
 
 button {
   font-family: inherit;
@@ -67,6 +71,9 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
   gap: 1rem;
   width: min(800px, 90vw);
   margin-bottom: 1rem;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
 }
 
 .level-card {
@@ -84,7 +91,6 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
 .level-card h3 { margin: 0 0 0.4rem; }
 .level-card p { font-size: 0.85rem; opacity: 0.7; margin-bottom: 0.6rem; }
 .level-card .best { font-size: 0.85rem; color: var(--warm); }
-.level-card .lock-icon { font-size: 1.2rem; }
 
 #hud { justify-content: space-between; padding: 1.5rem; }
 .hud-topleft, .hud-topright { display: flex; flex-direction: column; gap: 0.4rem; }
@@ -102,9 +108,7 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
 #hud-flow {
   font-size: 2rem; font-weight: 700; color: #ffb673;
   text-shadow: 0 0 16px rgba(255, 182, 115, 0.7);
-  transition: transform 0.1s;
 }
-#hud-flow.bump { transform: scale(1.15); }
 #hud-points { font-size: 1.1rem; opacity: 0.85; }
 
 .hud-bottom {
@@ -118,6 +122,7 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
 }
 #hud-progress-fill { height: 100%; width: 0%; background: var(--warm); transition: width 0.1s; }
 
+#results { overflow-y: auto; justify-content: flex-start; padding-top: 2rem; padding-bottom: 2rem; }
 #results .stats-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 1rem; width: min(600px, 90vw);
@@ -138,9 +143,9 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
   border: 2px solid rgba(255, 213, 168, 0.2);
   border-radius: 16px; padding: 1.2rem;
   cursor: pointer; text-align: center;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s, border-color 0.15s;
 }
-.card:hover { transform: translateY(-4px); border-color: var(--warm); box-shadow: 0 12px 32px rgba(255, 213, 168, 0.25); }
+.card:hover { transform: translateY(-4px); border-color: var(--warm); }
 .card .icon { font-size: 2rem; margin-bottom: 0.5rem; }
 .card .name { font-weight: 700; color: var(--warm); margin-bottom: 0.3rem; }
 .card .desc { font-size: 0.85rem; opacity: 0.75; }
@@ -148,10 +153,90 @@ button.small { padding: 0.5rem 1.4rem; font-size: 0.9rem; }
 #leaderboard {
   width: min(600px, 90vw);
   background: var(--glass); border-radius: 16px;
-  padding: 1rem 1.2rem; margin-top: 1rem;
+  padding: 1rem 1.2rem; margin-top: 1rem; margin-bottom: 1rem;
 }
 #leaderboard h4 { color: var(--warm); margin-bottom: 0.6rem; font-size: 0.95rem; }
 .lb-row { display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; }
 .lb-row.you { color: var(--warm); font-weight: 700; }
 .lb-row .rank { opacity: 0.6; width: 2em; }
 .lb-row .name { flex: 1; }
+
+/* TOUCH CONTROLS */
+#touch-controls { display: none; pointer-events: none; position: absolute; inset: 0; z-index: 100; }
+body.touch-active #touch-controls { display: block; }
+
+.touch-btn, .touch-restart, .touch-flip {
+  position: fixed;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 700;
+  color: var(--cream);
+  border: 2px solid rgba(255, 213, 168, 0.55);
+  background: rgba(255, 213, 168, 0.22);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  cursor: pointer;
+  transition: transform 0.06s, background 0.06s;
+}
+.touch-btn.pressed, .touch-restart.pressed, .touch-flip.pressed {
+  background: rgba(255, 213, 168, 0.7);
+  transform: scale(0.94);
+}
+
+.touch-left, .touch-right {
+  width: 90px; height: 90px; border-radius: 50%; font-size: 2rem;
+  bottom: calc(1.2rem + env(safe-area-inset-bottom));
+}
+.touch-left  { left: 1.2rem; }
+.touch-right { right: 1.2rem; }
+
+.touch-drift {
+  bottom: calc(1.4rem + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: calc(100vw - 240px); max-width: 320px; min-width: 100px;
+  height: 74px; border-radius: 37px;
+  font-size: 0.95rem; letter-spacing: 0.3em; padding-left: 0.3em;
+}
+.touch-drift.pressed { transform: translateX(-50%) scale(0.97); }
+
+.touch-brake {
+  width: 68px; height: 68px; border-radius: 50%; font-size: 0.85rem;
+  bottom: calc(8rem + env(safe-area-inset-bottom)); left: 1.4rem;
+}
+body.brake-right .touch-brake {
+  left: auto; right: 1.4rem;
+}
+
+.touch-restart {
+  top: calc(0.8rem + env(safe-area-inset-top));
+  right: calc(0.8rem + env(safe-area-inset-right));
+  width: 48px; height: 48px; border-radius: 50%; font-size: 1.3rem;
+}
+
+.touch-flip {
+  top: calc(0.8rem + env(safe-area-inset-top));
+  right: calc(4rem + env(safe-area-inset-right));
+  width: 40px; height: 40px; border-radius: 50%; font-size: 0.9rem;
+}
+
+@media (max-width: 900px), (pointer: coarse) {
+  .hud-bottom { bottom: calc(9rem + env(safe-area-inset-bottom)) !important; }
+  .hud-bottom .hint { display: none; }
+  .hud-topleft { top: calc(0.8rem + env(safe-area-inset-top)); left: 1rem; }
+  .hud-topright { top: calc(0.8rem + env(safe-area-inset-top)); right: calc(7rem + env(safe-area-inset-right)); }
+  #hud-speed { font-size: 2rem; }
+  #hud-flow { font-size: 1.5rem; }
+  #hud-points { font-size: 0.95rem; }
+}
+
+@media (max-width: 420px) {
+  .touch-left, .touch-right { width: 78px; height: 78px; font-size: 1.6rem; }
+  .touch-brake { width: 58px; height: 58px; bottom: calc(7rem + env(safe-area-inset-bottom)); }
+  .touch-drift { height: 64px; width: calc(100vw - 200px); }
+}
