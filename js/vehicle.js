@@ -6,16 +6,15 @@ export class Vehicle {
     this.RAPIER = RAPIER;
     this.scene = scene;
 
-    // Base stats — every tuning number lives here
     this.base = {
       engineForce: 3200,
       brakeForce: 60,
       steerMax: 0.55,
       frictionSlip: 3.0,
       driftFrictionSlip: 0.85,
-      suspensionStiffness: 32,
-      suspensionRestLength: 0.65,
-      suspensionMaxTravel: 0.5,
+      suspensionStiffness: 28,
+      suspensionRestLength: 0.35,
+      suspensionMaxTravel: 0.25,
       wheelRadius: 0.42,
     };
     this.stats = { ...this.base };
@@ -55,8 +54,10 @@ export class Vehicle {
       { x:  hw, y: -hh, z:  1.3 },
     ];
 
+    // Down direction (suspension travel) and axle (spin axis) are different things.
+    // Forward = -Z, so the wheel's spin axis MUST be X. This was the bug.
     const down = { x: 0, y: -1, z: 0 };
-    const axle = { x: 0, y: 0, z: 1 };
+    const axle = { x: 1, y: 0, z: 0 };
 
     for (const pos of wheelPositions) {
       this.controller.addWheel(
@@ -74,9 +75,8 @@ export class Vehicle {
     const c = this.controller;
     for (let i = 0; i < c.numWheels(); i++) {
       c.setWheelSuspensionStiffness(i, this.stats.suspensionStiffness);
-      c.setWheelSuspensionCompression(i, 8.0);
-      c.setWheelSuspensionRelaxation(i, 8.0);
-      // Rapier's actual API name is setWheelMaxSuspensionTravel
+      c.setWheelSuspensionCompression(i, 6.0);
+      c.setWheelSuspensionRelaxation(i, 6.0);
       c.setWheelMaxSuspensionTravel(i, this.stats.suspensionMaxTravel);
       c.setWheelFrictionSlip(i, this.stats.frictionSlip);
       c.setWheelSteering(i, 0);
@@ -103,11 +103,11 @@ export class Vehicle {
     cabin.position.set(0, 1.1, -0.1);
     g.add(cabin);
 
-    const wheelGeo = new THREE.CylinderGeometry(this.stats.wheelRadius, this.stats.wheelRadius, 0.28, 12);
-    wheelGeo.rotateZ(Math.PI / 2);
+    const wheelGeo = new THREE.CylinderGeometry(this.stats.wheelRadius, this.stats.wheelRadius, 0.28, 16);
+    wheelGeo.rotateZ(Math.PI / 2);  // axis now along X, matches axle = (1,0,0)
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.9 });
     this.wheels = [];
-    const wp = [[-0.95, 0.36, -1.2], [0.95, 0.36, -1.2], [-0.95, 0.36, 1.2], [0.95, 0.36, 1.2]];
+    const wp = [[-0.85, 0.42, -1.3], [0.85, 0.42, -1.3], [-0.85, 0.42, 1.3], [0.85, 0.42, 1.3]];
     for (const [x, y, z] of wp) {
       const w = new THREE.Mesh(wheelGeo, wheelMat);
       w.position.set(x, y, z);
@@ -136,7 +136,9 @@ export class Vehicle {
     c.setWheelSteering(0, steer);
     c.setWheelSteering(1, steer);
 
-    // Rear-wheel drive. Negative Z = forward for the chassis orientation.
+    // Rear-wheel drive. Negative because forward is -Z and positive engine
+    // force pushes the wheel toward +Z (per Rapier's axle cross suspension
+    // convention).
     const engine = inp.throttle ? -this.stats.engineForce : 0;
     c.setWheelEngineForce(2, engine);
     c.setWheelEngineForce(3, engine);
